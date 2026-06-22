@@ -154,6 +154,11 @@
       color: #1D4ED8;
     }
 
+    .days        { font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+    .days.ok     { color: var(--gray); }
+    .days.warn   { color: var(--amber); }
+    .days.breach { color: #DC2626; }
+
     a { color: var(--blue); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -266,23 +271,38 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function daysAgo(iso) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+function daysBadge(days, status) {
+  if (status === 'passed') return `<span class="days ok">${days}d</span>`;
+  if (days >= 5) return `<span class="days breach">🔴 ${days}d</span>`;
+  if (days >= 3) return `<span class="days warn">⚠️ ${days}d</span>`;
+  return `<span class="days ok">${days}d</span>`;
+}
+
 function buildTable(issues) {
   if (!issues.length) return `<div class="empty">No submissions here.</div>`;
   return `<table>
     <thead><tr>
-      <th>Builder</th><th>Cohort</th><th>Milestone</th><th>Submitted</th><th>Status</th><th>Issue</th>
+      <th>Builder</th><th>Cohort</th><th>Milestone</th><th>Submitted</th><th>Days</th><th>Status</th><th>Repo</th><th>Issue</th>
     </tr></thead>
     <tbody>${issues.map(i => {
       const builder   = extract(i.body, 'Builder Name');
       const cohort    = extract(i.body, 'Cohort');
+      const repoUrl   = extract(i.body, 'GitHub Repo URL');
       const milestone = getMilestone(i.labels);
       const status    = getStatus(i.labels);
+      const days      = daysAgo(i.created_at);
       return `<tr>
         <td>${builder}</td>
         <td>${cohort}</td>
         <td><span class="m-badge">${milestone}</span></td>
         <td>${formatDate(i.created_at)}</td>
+        <td>${daysBadge(days, status)}</td>
         <td>${statusBadge(status)}</td>
+        <td>${repoUrl !== '—' ? `<a href="${repoUrl}" target="_blank">repo ↗</a>` : '—'}</td>
         <td><a href="${i.html_url}" target="_blank">#${i.number}</a></td>
       </tr>`;
     }).join('')}</tbody>
@@ -292,7 +312,7 @@ function buildTable(issues) {
 async function fetchAll() {
   let issues = [], page = 1;
   while (true) {
-    const res   = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=milestone-submission&state=all&per_page=100&page=${page}`);
+    const res   = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?labels=milestone-submission&state=open&per_page=100&page=${page}`);
     const batch = await res.json();
     if (!Array.isArray(batch) || !batch.length) break;
     issues = issues.concat(batch.filter(i => !i.pull_request));
